@@ -84,7 +84,10 @@ def f_inv (as: Mathlib.Vector Int (k+1)) (x': Int): Mathlib.Vector Int (k+1) :=
 
 
 def X (nₖ : Vector Int (k+1)): Set (Vector Int (k+1)) :=
-  {xs : Vector Int (k+1) | ∀ i: Fin (k+1), 0 ≤ xs.get i ∧ xs.get i < nₖ.get i}
+  {xs : Vector Int (k+1) |
+    (∀ i, 0 < nₖ.get i) ∧
+    (∀ i: Fin (k+1), 0 ≤ xs.get i ∧ xs.get i < nₖ.get i)
+  }
 
 def Y (nₖ aₖ : Vector Int (k+1)): Set Int := f aₖ '' X nₖ
 
@@ -97,3 +100,7 @@ def Y' (nₖ aₖ : Vector Int (k+1)): Set Int :=
     (0<aₖ.last → 0 ≤ x' ∧ x' < aₖ.head*nₖ.head) ∧
     (aₖ.last<0 → aₖ.head*nₖ.head < x' ∧ x' ≤ 0 )
   }
+
+def Props (nₖ aₖ : Vector Int (k+1)): Prop :=
+  aₖ.last ≠ 0 ∧
+  (∀ i, i<k → aₖ.get i = aₖ.get (i+1) * nₖ.get (i+1))

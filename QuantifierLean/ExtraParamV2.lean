@@ -16,28 +16,22 @@ open Mathlib
 
 -- F applied to F_inv gives back the same answer
 theorem f_f_inv :
- ∀ aₖ nₖ: Vector Int (k+1), ∀ x': Int,
- 0 ≠ aₖ.last →
- x' % aₖ.last = 0 →
- (∀ i, 0 < nₖ.get i) →
- (∀ i, i<k → aₖ.get i = aₖ.get (i+1) * nₖ.get (i+1)) →
- (0<aₖ.last → 0 ≤ x' ∧ x' < aₖ.head*nₖ.head) ∧
- (aₖ.last<0 → aₖ.head*nₖ.head < x' ∧ x' ≤ 0 ) →
- f aₖ (f_inv aₖ x') = x'
-  := by
+  ∀ a n: Vector Int (k+1), ∀ x': Int,
+  x' ∈ Y' n a →
+  f a (f_inv a x') = x' := by
   induction k
   case zero =>
-    intro ak nk x' h0 h1 h2 h3 h4
-    cases' h4 with h4_1 h4_2
+    intro a n x' xInY
     simp
     rw [f_inv]
     conv =>
       lhs; arg 2; arg 1
       rw [f_inv_h, f_inv_el, base]
       simp
-
-    match ak, nk with
+    match a, n with
     | ⟨head::[], a_length⟩, ⟨headn::[], n_length⟩ =>
+      match xInY with
+      | ⟨h1, ⟨h2, ⟨h3, ⟨_, ⟨h5, h6⟩⟩⟩⟩⟩ =>
       repeat rw [f]
       simp_all
       conv =>
@@ -46,194 +40,117 @@ theorem f_f_inv :
         arg 2
         rw [Vector.head]
         simp
-      -- rw [Vector.last, Vector.get] at h4_1
-      rw [vector_head_1, vector_last_1] at h4_1
-      rw [vector_head_1, vector_last_1] at h4_2
-      rw [@vector_last_1] at h0
-      match Int.lt_or_lt_of_ne h0 with
-      | Or.inl hl =>
-        cases' h4_1 hl with left right
+      rw [vector_head_1, vector_last_1] at h5
+      rw [vector_head_1, vector_last_1] at h6
+      rw [@vector_last_1] at h1
+      match Int.lt_or_lt_of_ne h1 with
+      | Or.inr hl =>
+        cases' h5 hl with left right
         rw [abs_of_nonneg left, abs_of_pos hl]
-        exact Int.mul_ediv_cancel' h1
-      | Or.inr hr =>
-        cases' h4_2 hr with left right
+        apply Int.mul_ediv_cancel'
+        exact h2
+      | Or.inl hr =>
+        cases' h6 hr with left right
         rw [abs_of_neg hr, abs_of_nonpos right]
         simp
         apply Int.neg_eq_comm.mp
         symm
         apply Int.mul_ediv_cancel'
         apply Int.dvd_neg.mpr
-        exact h1
-
+        exact h2
   case succ k ih =>
-    intro ak nk x' h0 h1 h2 h3 h4
-    rw [f_inv]
-    conv =>
-      lhs; arg 2; arg 1
-      rw [f_inv_h, f_inv_el, base]
-      simp
-    let vn: Vector Int (k+1) := ak.tail
-    let wn: Vector Int (k+1) := nk.tail
-    cases' ak with ak a_length
-    cases ak
-    case nil =>
-      rw [List.length] at a_length
-      simp_all
-    case cons a ak =>
-      rw [f]
-      have h5: (⟨k + 1, by simp⟩ : (Fin (k + 1 + 1))) ≠ (0:Nat) := by
-        apply Fin.ne_of_val_ne
-        simp
-      simp_all
-      have h1' := last_div_x h1 h3
-      have aNotZ: a ≠ 0 := a_not_zero 0 h3 h2 (Ne.symm h0)
+    intro a n x' xInY
+    let x := (f_inv a x')
+    let a_tail := a.tail
+    let n_tail := n.tail
+    let x_tail := x.tail
+    have xeq: x_tail = x.tail := by rfl
+    have aeq: a_tail = a.tail := by rfl
+    have neq: n_tail = n.tail := by rfl
+    have xInImg : x ∈ (f_inv a '' Y' n a) := by
+      rw [Set.image, Set.mem_setOf_eq]
+      use x'
+    match xInY_prev aeq neq xInY with
+    | ⟨inPrev_pos, inPrev_neg⟩ =>
+    match xInY with
+    | ⟨h1, ⟨_, ⟨h3, ⟨h4, ⟨h5, h6⟩⟩⟩⟩⟩ =>
+    have aheadnzero := a_not_zero 0 h4 h3 h1
+    rw [Vector.get_zero] at aheadnzero
+    match Int.lt_or_lt_of_ne h1 with
+    | Or.inr a_pos =>
+      have h3' : ∀ (i : Fin (k + 1)), 0 < n_tail.get i := by
+        rw [neq]
+        apply smaller_n h3
+      have h4' := tail_an aeq neq h4
+      have hlast: 0 < a_tail.last := by
+        rw [aeq]
+        rw [Vector.tail_last]
+        exact a_pos
+      have hhead := a_same1 0 h4 h3 a_pos -- hlast
+      have inPrev := inPrev_pos a_pos
+      have ih_applied := ih a.tail n.tail (|x'| % a.head) inPrev
+      have f_inv_pred' := f_inv_h_pred' a x' aheadnzero
+      rw [f_inv]
       conv =>
-        lhs
-        arg 1
-        arg 2
-        arg 2
-        rw [Vector.head]
+        lhs; arg 2; arg 1
+        rw [f_inv_h]
         simp
+      match a with
+      | ⟨ah :: a, alength⟩ =>
+      rw [f]
+      simp
+      rw [Vector.tail] at ih_applied
+      simp at ih_applied
+      rw [← f_inv_pred', Vector.tail, ih_applied]
+      rw [f_inv_el, base, Vector.head]
+      simp
+      rw [Vector.head]
+      simp
+      rw [Vector.get] at hhead
+      simp at hhead
 
-      have h3': (∀ i, i<k → vn.get i = vn.get (i+1) * wn.get (i+1)) := by
-        have l1: wn = nk.tail := by simp
-        have l2: vn = Vector.tail ⟨a :: ak, a_length⟩ := by simp
-        apply an_eq l2 l1 h3
-      cases' h4 with h4_1 h4_2
-      let ak_proof := f.proof_1 a ak a_length
-      match Int.lt_or_lt_of_ne h0 with
-      | Or.inl hl =>
-        cases' h4_1 hl with left right
-        have hhead := a_same1 0 h3 h2 hl
-        conv =>
-          lhs; arg 2
-          rw [← f_inv_h_pred' ⟨a :: ak, a_length⟩ x' aNotZ]
-          arg 2
-          congr
-          . rw [Vector.tail]; simp
-          . arg 2; rw [Vector.head]; simp
-        have h4_1': 0 < Vector.last ⟨ak, ak_proof⟩ →
-          0 ≤ |x'| % a ∧ |x'| % a < Vector.head ⟨ak, ak_proof⟩ * wn.head := by
-          intro h
-          constructor
-          exact Int.emod_nonneg |x'| aNotZ
-          have h3_a := h3 0 (by simp)
-          simp at h3_a
-          have wn_eq: wn = nk.tail := by simp
-          have eqv: Vector.get ⟨a :: ak, a_length⟩ 1 * nk.get 1 = Vector.head ⟨ak, ak_proof⟩ * wn.head
-            := by
-            rw [wn_eq]
-            rw [<- Mathlib.Vector.get_zero, <- Mathlib.Vector.get_zero]
-            rw [Mathlib.Vector.get_tail]
-            rfl
-          rw [Vector.head] at h3_a
-          simp at h3_a
-          rw [h3_a]
-          rw [eqv]
-          apply Int.emod_lt_of_pos
-          have wn_head_pos: wn.head >0 := by
-            rw [wn_eq]
-            rw [<- Mathlib.Vector.get_zero, Mathlib.Vector.get_tail]
-            apply h2
-          have hhead := a_same1 0 h3' (smaller_n h2) hl
-          have akheadeq: vn.get 0 = Vector.head ⟨ak, ak_proof⟩ := by
-            have vn_eq: vn = Vector.tail ⟨a :: ak, a_length⟩ := by rfl
-            rw [vn_eq]
-            rw [Mathlib.Vector.tail]
-            simp
-          rw [akheadeq] at hhead
-          apply Int.mul_pos hhead wn_head_pos
-        have h4_2': Vector.last ⟨ak, ak_proof⟩ < 0 →
-         Vector.head ⟨ak, ak_proof⟩ * wn.head < |x'| % a ∧ |x'| % a ≤ 0 := by
-         have h := lt_asymm hl
-         intro hh
-         exact absurd hh h
-        rw [ih ⟨ak, ak_proof⟩ wn (|x'| % a)
-          (last_zero h0)
-          h1'
-          (smaller_n h2) h3'
-          h4_1'
-          h4_2'
-        ]
+      rw [abs_of_pos hhead, abs_of_nonneg (h5 a_pos).left]
+      rw [Int.ediv_add_emod]
+    | Or.inl a_neg =>
+      have h3' : ∀ (i : Fin (k + 1)), 0 < n_tail.get i := by
+        rw [neq]
+        apply smaller_n h3
+      have h4' := tail_an aeq neq h4
+      have hlast: a_tail.last < 0 := by
+        rw [aeq]
+        rw [Vector.tail_last]
+        exact a_neg
+      have hhead := a_same2 0 h4 h3 a_neg -- hlast
+      have inPrev := inPrev_neg a_neg
 
-        rw [Vector.get] at hhead
-        simp at hhead
-        rw [abs_of_pos hhead, abs_of_nonneg left]
-        rw [Int.ediv_add_emod]
-      | Or.inr hr =>
-        have h1'' := last_div_x' h1 h3
-        cases' h4_2 hr with left right
-        conv =>
-          lhs; arg 2
-          rw [← f_inv_h_pred2' ⟨a :: ak, a_length⟩ x' aNotZ right]
-          arg 2
-          congr
-          . rw [Vector.tail]; simp
-          . arg 1; arg 2; rw [Vector.head]; simp
-
-        have h4_1': 0 < Vector.last ⟨ak, ak_proof⟩ →
-          0 ≤ (-(-x' % a)) ∧ (-(-x' % a)) < Vector.head ⟨ak, ak_proof⟩ * wn.head := by
-          have h := lt_asymm hr
-          intro hh
-          exact absurd hh h
-
-        have h4_2': Vector.last ⟨ak, ak_proof⟩ < 0 →
-         Vector.head ⟨ak, ak_proof⟩ * wn.head < (-(-x' % a)) ∧ (-(-x' % a)) ≤ 0 := by
-          intro h
-          constructor
-          case left =>
-            have h3_a := h3 0 (by simp)
-            simp at h3_a
-            have wn_eq: wn = nk.tail := by simp
-            have eqv: Vector.get ⟨a :: ak, a_length⟩ 1 * nk.get 1 = Vector.head ⟨ak, ak_proof⟩ * wn.head
-              := by
-              rw [wn_eq]
-              rw [<- Mathlib.Vector.get_zero, <- Mathlib.Vector.get_zero]
-              rw [Mathlib.Vector.get_tail]
-              rfl
-            rw [Vector.head] at h3_a
-            simp at h3_a
-            rw [h3_a]
-            rw [eqv]
-            apply Int.lt_neg_of_lt_neg
-            simp
-            have mod_lem {a b: Int} (h: b <0) : a % b < -b := by
-              have b_abs := abs_of_neg h
-              rw [← Int.emod_neg, ← b_abs]
-              exact Int.emod_lt_of_pos a (abs_pos_of_neg h)
-            apply mod_lem
-            have wn_head_pos: wn.head >0 := by
-              rw [wn_eq]
-              rw [<- Mathlib.Vector.get_zero, Mathlib.Vector.get_tail]
-              apply h2
-            have hhead := a_same2 0 h3' (smaller_n h2) hr
-            have akheadeq: vn.get 0 = Vector.head ⟨ak, ak_proof⟩ := by
-              have vn_eq: vn = Vector.tail ⟨a :: ak, a_length⟩ := by rfl
-              rw [vn_eq]
-              rw [Mathlib.Vector.tail]
-              simp
-            rw [akheadeq] at hhead
-            apply Int.mul_neg_of_neg_of_pos hhead wn_head_pos
-          case right =>
-            apply Int.neg_nonpos_of_nonneg
-            apply Int.emod_nonneg (-x') aNotZ
-
-        rw [ih ⟨ak, f.proof_1 a ak a_length⟩ wn (-(-x' % a))
-          (last_zero h0)
-          h1''
-          (smaller_n h2) h3'
-          (h4_1')
-          (h4_2')
-        ]
-        have hhead := a_same2 0 h3 h2 hr
-        rw [Vector.get] at hhead
-        simp at hhead
-        rw [abs_of_neg hhead, abs_of_nonpos right]
-        rw [Int.ediv_neg, ← Int.neg_mul_comm]
+      have ih_applied := ih a.tail n.tail (-(-x' % a.head)) inPrev
+      have f_inv_pred' := f_inv_h_pred2' a x' aheadnzero
+      rw [f_inv]
+      conv =>
+        lhs; arg 2; arg 1
+        rw [f_inv_h]
         simp
-        rw [← Int.neg_add]
-        rw [Int.ediv_add_emod]
-        simp
+      match a with
+      | ⟨ah :: a, alength⟩ =>
+      rw [f]
+      simp
+      rw [Vector.tail] at ih_applied
+      simp at ih_applied
+      rw [← f_inv_pred', Vector.tail, ih_applied]
+      rw [f_inv_el, base, Vector.head]
+      simp
+      rw [Vector.head]
+      simp
+      rw [Vector.get] at hhead
+      simp at hhead
+
+      rw [abs_of_neg hhead, abs_of_nonpos (h6 a_neg).right]
+      rw [Int.ediv_neg, ← Int.neg_mul_comm]
+      simp
+      rw [← Int.neg_add]
+      rw [Int.ediv_add_emod]
+      simp
+      exact (h6 a_neg).right
 
 theorem left_invf_f {nₖ aₖ : Vector Int (k+1)} :
   (0 ≠ aₖ.last) →
