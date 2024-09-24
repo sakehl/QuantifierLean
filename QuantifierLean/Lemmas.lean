@@ -264,6 +264,20 @@ lemma Vector.tail_last {α: Type} {n: Nat} (v: Vector α (n+1+1)): v.tail.last =
   rw [Mathlib.Vector.get_tail]
   rfl
 
+lemma Vector.tail_get_head {α: Type} {n: Nat} (v: Vector α (n+1+1)): v.get 1 = v.tail.head := by
+  rw [← Vector.get_zero, Vector.get_tail]
+  rfl
+
+lemma Vector.get_head {α: Type} {a: α} {n: Nat} {as: List α} {a_len: (a::as).length = n+1}
+: @Vector.head α n ⟨a:: as, a_len⟩ = a := by
+  rw [Vector.head]
+
+lemma Vector.get_one_cons {α: Type} {a: α} {n: Nat} {as: List α} {a_len: (a::as).length = n+1+1}
+: @Vector.get α (n+1+1) ⟨a:: as, a_len⟩ 1 = @Vector.head α n ⟨as, by rw [List.length] at a_len; simp at a_len; exact a_len⟩ := by
+  rw [<- Vector.get_zero]
+  simp [Vector.get]
+  rfl
+
 lemma head_is_div {a: Vector Int (k+1)} {n: Vector Int (k+1)}:
   (∀ i: Nat, i<k → a.get i = a.get (i+1) * n.get (i+1)) →
   ∃ q, a.head = q * a.last := by
@@ -564,6 +578,27 @@ theorem ediv_nonneg' {a b : Int} (Ha : a ≤ 0) (Hb : b ≤ 0) : 0 ≤ a / b := 
   | Int.negSucc a, Int.negSucc b =>
     exact Int.le_add_one (Int.ediv_nonneg (Int.ofNat_zero_le a) (Int.le_trans (Int.ofNat_zero_le b) (Int.le.intro 1 rfl)))
 
+lemma Int.mul_add_lt {a x b n: Int} (h1: x<n) (h2: 0 < a) (h3: b < a) :
+  a*x+b < a*n := by
+  have h5: a*(x+1) ≤ a*n := Int.mul_le_mul_of_nonneg_left
+     (Int.add_one_le_of_lt h1) (Int.le_of_lt h2)
+  rw [Int.mul_add, Int.mul_one] at h5
+  have h6: a*x + b < a*x + a := by
+    apply Int.add_lt_add_left h3
+  apply Int.lt_of_lt_of_le h6 h5
+
+lemma Int.mul_add_lt2 {a x b n: Int} (h1: x<n) (h2: a < 0) (h3: a < b) :
+  a*n < a*x+b := by
+  have rev: -a*x-b < -a*n := by
+    apply Int.mul_add_lt h1 (Int.neg_pos_of_neg h2)
+    apply Int.lt_of_neg_lt_neg
+    simp
+    exact h3
+  apply Int.lt_of_neg_lt_neg
+  rw [Int.neg_add]
+  simp at rev
+  exact rev
+
 lemma get_tail_succ {a_tail: Vector Int (k+1)} {a: Vector Int (k+1+1)}
   (j i: Nat)
   (aeq: a_tail = a.tail) (h1: j<k)
@@ -849,6 +884,92 @@ lemma Prop_prev_prop
     have h2' := tail_an aeq neq h2
     exact ⟨h1', h2'⟩
 
+lemma f_in_bounds: ∀ a n x: Vector Int (k+1),
+  Props n a →
+  x ∈ X n →
+  (0<a.last → 0 ≤ f a x ∧ f a x < a.head*n.head) ∧
+  (a.last<0 → a.head*n.head < f a x ∧ f a x ≤ 0 ) ∧
+  f a x % a.last = 0 := by
+  induction k
+  case zero =>
+    intro a n x props xinX
+    match props, xinX with
+    | ⟨h1, h2⟩, ⟨h3, h4⟩ =>
+    match a, x with
+    | ⟨[a_h], _⟩, ⟨[x_h], _⟩ =>
+    rw [f, ← Vector.tail_head, Vector.get_head, f]
+    have h4' := h4 0
+    rw [Vector.get_zero, Vector.get_head] at h4'
+    rw [← Vector.tail_head, Vector.get_head] at h1
+    simp_all
+    intro a_neg
+    apply mul_nonpos_of_nonpos_of_nonneg (Int.le_of_lt a_neg) h4'.left
+  case succ k ih =>
+    intro a n x props xinX
+    match props, xinX with
+    | ⟨h1, h2⟩, ⟨h3, h4⟩ =>
+    match a, x with
+    | ⟨a_h::a_tail, a_len⟩, ⟨x_h::x_tail, x_len⟩ =>
+    let a_tail_v: Vector Int (k+1) := ⟨a_tail, f.proof_1 a_h a_tail a_len⟩
+    let x_tail_v: Vector Int (k+1) := ⟨x_tail, f.proof_2 x_h x_tail x_len⟩
+    have aeq: a_tail_v =
+      Vector.tail ⟨a_h::a_tail, a_len⟩ := by
+      rw [Vector.tail]
+    have aNotZ := a_not_zero 0 h2 h3 h1
+    rw [Vector.get_zero] at aNotZ
+    rw [f]
+    have prevProp := Prop_prev_prop (by rfl) (aeq) props
+    have ih' := ih ⟨a_tail, f.proof_1 a_h a_tail a_len⟩ n.tail x_tail_v prevProp (xInX_prev (by rfl) (by rfl) xinX)
+    match ih' with
+    | ⟨ih1, ih2, ih3⟩ =>
+    have h4' := h4 0
+    rw [Vector.get_zero, Vector.get_zero, Vector.get_head] at h4'
+    constructor
+    case left =>
+      intro a_pos
+      have ah_pos := a_same1 0 h2 h3 a_pos
+      rw [Vector.get_zero, Vector.get_head] at ah_pos
+      rw [← Vector.tail_last, Vector.tail] at a_pos
+      simp at a_pos
+      have ih1' := ih1 a_pos
+      constructor
+      case left =>
+        apply Int.add_nonneg
+        exact Int.mul_nonneg (Int.le_of_lt ah_pos) (h4'.left)
+        exact ih1'.left
+      case right =>
+        rw [Vector.get_head]
+        have h2' := h2 0
+        simp at h2'
+        rw [Vector.get_head] at h2'
+        apply Int.mul_add_lt h4'.right ah_pos
+        rw [h2', Vector.get_one_cons, Vector.tail_get_head]
+        exact ih1'.right
+    case right =>
+      constructor
+      case left =>
+        intro a_neg
+        have ah_neg := a_same2 0 h2 h3 a_neg
+        rw [Vector.get_zero, Vector.get_head] at ah_neg
+        rw [← Vector.tail_last, Vector.tail] at a_neg
+        simp at a_neg
+        have ih1' := ih2 a_neg
+        constructor
+        case right =>
+          apply Int.add_nonpos
+          apply Int.mul_nonpos_of_nonpos_of_nonneg (Int.le_of_lt ah_neg) (h4'.left)
+          exact ih1'.right
+        case left =>
+          rw [Vector.get_head]
+          have h2' := h2 0
+          simp at h2'
+          rw [Vector.get_head] at h2'
+          apply Int.mul_add_lt2 h4'.right ah_neg
+          rw [h2', Vector.get_one_cons, Vector.tail_get_head]
+          exact ih1'.left
+      case right =>
+        sorry
+
 theorem f_inv_f :
   ∀ a n x: Vector Int (k+1),
   Props n a →
@@ -867,12 +988,9 @@ theorem f_inv_f :
     simp at h2
     have baseCase: |a_h * x_h| / |a_h| = x_h := by
       rw [Int.mul_comm, abs_mul, Int.mul_ediv_cancel (|x_h|)]
-
       have x_not_zero := (h4 0).left
-      rw [Vector.get_zero, Vector.head] at x_not_zero
-      simp at x_not_zero
+      rw [Vector.get_zero, Vector.get_head] at x_not_zero
       exact (abs_of_nonneg x_not_zero)
-
       rw [Vector.last_def, Fin.last] at h1
       simp at h1
       rw [Vector.head] at h1
@@ -902,21 +1020,34 @@ theorem f_inv_f :
     have aNotZ := a_not_zero 0 h2 h3 h1
     rw [Vector.get_zero] at aNotZ
     rw [f]
-
+    have prevProp := Prop_prev_prop (by rfl) (aeq) props
+    match f_in_bounds ⟨a_h :: a_tail, a_len⟩ n ⟨x_h::x_tail, x_len⟩ props xinX with
+    | ⟨bounds1a, bounds2a, bounds3a⟩ =>
+    match f_in_bounds a_tail_v n.tail x_tail_v prevProp (xInX_prev (by rfl) (by rfl) xinX) with
+    | ⟨bounds1b, bounds2b, bounds3b⟩ =>
     match Int.lt_or_lt_of_ne h1 with
     | Or.inr a_pos =>
       have a_h_pos : 0 < a_h := by
         have same := a_same1 0 h2 h3 a_pos
-        rw [Vector.get_zero, Vector.head] at same
+        rw [Vector.get_zero, Vector.get_head] at same
         exact same
       rw [f_inv_pred aNotZ]
-      rw [Vector.head] at aNotZ
-      simp at aNotZ
-      rw [Vector.tail, Vector.head]
+      rw [Vector.get_head] at aNotZ
+      rw [Vector.tail, Vector.get_head]
       simp
-      have f_pos: 0 ≤ f a_tail_v x_tail_v := by sorry
-      have arg_pos: 0 ≤ a_h * x_h + f a_tail_v x_tail_v := by sorry
-      have f_smaller: f a_tail_v x_tail_v < a_h := by sorry
+      have bounds1a := bounds1a a_pos
+      have bounds1b := bounds1b a_pos
+      have f_pos: 0 ≤ f a_tail_v x_tail_v := bounds1b.left
+      have arg_pos: 0 ≤ a_h * x_h + f a_tail_v x_tail_v := by
+        have almost := bounds1a.left
+        rw [f] at almost
+        exact almost
+      have f_smaller: f a_tail_v x_tail_v < a_h := by
+        have h2' := h2 0
+        simp at h2'
+        rw [Vector.get_head] at h2'
+        rw [h2', Vector.get_one_cons, Vector.tail_get_head]
+        exact bounds1b.right
       rw [abs_of_nonneg arg_pos]
       have x_h_eq: (a_h * x_h + f a_tail_v x_tail_v) / |a_h| = x_h := by
         rw [abs_of_pos a_h_pos, Int.add_comm]
@@ -927,24 +1058,36 @@ theorem f_inv_f :
         lhs; arg 2; arg 2
         rw [Int.add_comm, Int.add_mul_emod_self_left]
         rw [Int.emod_eq_of_lt f_pos f_smaller]
-      have prevProp := Prop_prev_prop (by rfl) (aeq) props
+
       rw [ih a_tail_v n.tail x_tail_v prevProp (xInX_prev (by rfl) (by rfl) xinX)]
       rw [x_h_eq]
       rfl
     | Or.inl a_neg =>
       have a_h_neg : a_h < 0 := by
         have same := a_same2 0 h2 h3 a_neg
-        rw [Vector.get_zero, Vector.head] at same
+        rw [Vector.get_zero, Vector.get_head] at same
         exact same
-      have arg_neg: a_h * x_h + f a_tail_v x_tail_v ≤ 0 := by sorry
+      have bounds2a := bounds2a a_neg
+      have bounds2b := bounds2b a_neg
+      have arg_neg: a_h * x_h + f a_tail_v x_tail_v ≤ 0 := by
+        have almost := bounds2a.right
+        rw [f] at almost
+        exact almost
       rw [f_inv_pred2 aNotZ arg_neg]
       have min_a_not_zero: -a_h ≠ 0 := by
        simp
        assumption
-      rw [Vector.tail, Vector.head]
+      rw [Vector.tail, Vector.get_head]
       simp
-      have f_neg: 0 ≤ -f a_tail_v x_tail_v  := by sorry
-      have f_smaller: -f a_tail_v x_tail_v < -a_h := by sorry
+      have f_neg: 0 ≤ -f a_tail_v x_tail_v  := by
+        apply Int.neg_nonneg_of_nonpos
+        exact bounds2b.right
+      have f_smaller: -f a_tail_v x_tail_v < -a_h := by
+        have h2' := h2 0
+        simp at h2'
+        rw [Vector.get_head] at h2'
+        rw [h2', Vector.get_one_cons, Vector.tail_get_head]
+        exact Int.neg_lt_neg bounds2b.left
       rw [abs_of_nonpos arg_neg]
 
       have x_h_eq: -(a_h * x_h + f a_tail_v x_tail_v) / |a_h| = x_h := by
