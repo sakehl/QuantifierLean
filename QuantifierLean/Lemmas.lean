@@ -264,6 +264,19 @@ lemma Vector.tail_last {α: Type} {n: Nat} (v: Vector α (n+1+1)): v.tail.last =
   rw [Mathlib.Vector.get_tail]
   rfl
 
+lemma Vector.tail_last' {α: Type} {n: Nat} {a_h: α} {a_tail: List α}
+  {a_len: (a_h::a_tail).length = n+1+1} {a_tail_len: a_tail.length = n+1}:
+  Vector.last (⟨a_h :: a_tail, a_len⟩: Vector α (n+1+1)) =
+  Vector.last (⟨a_tail, a_tail_len⟩: Vector α (n+1)) := by
+  rw [Vector.last, Vector.last]
+  rw [Vector.get, Vector.get]
+  simp
+  conv =>
+    lhs
+    arg 2
+    rw [a_tail_len]
+  simp
+
 lemma Vector.tail_get_head {α: Type} {n: Nat} (v: Vector α (n+1+1)): v.get 1 = v.tail.head := by
   rw [← Vector.get_zero, Vector.get_tail]
   rfl
@@ -884,6 +897,9 @@ lemma Prop_prev_prop
     have h2' := tail_an aeq neq h2
     exact ⟨h1', h2'⟩
 
+
+
+
 lemma f_in_bounds: ∀ a n x: Vector Int (k+1),
   Props n a →
   x ∈ X n →
@@ -968,7 +984,16 @@ lemma f_in_bounds: ∀ a n x: Vector Int (k+1),
           rw [h2', Vector.get_one_cons, Vector.tail_get_head]
           exact ih1'.left
       case right =>
-        sorry
+        match head_is_div h2 with
+        | ⟨q, l1⟩ =>
+        rw [Vector.head, Vector.tail_last'] at l1
+        simp at l1
+        rw [Vector.tail_last']
+        rw [l1]
+        rw [Int.add_comm]
+        rw [Int.mul_comm, Int.mul_assoc]
+        rw [Int.add_mul_emod_self_left]
+        exact ih3
 
 theorem f_inv_f :
   ∀ a n x: Vector Int (k+1),
@@ -979,7 +1004,7 @@ theorem f_inv_f :
   case zero =>
     intro a n x props xinX
     match props, xinX with
-    | ⟨h1, h2⟩, ⟨h3, h4⟩ =>
+    | ⟨h1, h2⟩, ⟨_, h4⟩ =>
     match a, x with
     | ⟨[a_h], _⟩, ⟨[x_h], _⟩ =>
     simp
@@ -1048,6 +1073,7 @@ theorem f_inv_f :
         rw [Vector.get_head] at h2'
         rw [h2', Vector.get_one_cons, Vector.tail_get_head]
         exact bounds1b.right
+
       rw [abs_of_nonneg arg_pos]
       have x_h_eq: (a_h * x_h + f a_tail_v x_tail_v) / |a_h| = x_h := by
         rw [abs_of_pos a_h_pos, Int.add_comm]
