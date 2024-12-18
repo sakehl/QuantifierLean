@@ -1,106 +1,102 @@
 
 import Mathlib.Tactic
+import Mathlib.Data.Vector.Zip
+import QuantifierLean.Prelude
 open Mathlib
 
-lemma base_l1 {i: Fin k} : ↑i - 1 < k := by
-  cases' i with v lt
-  simp_all
-  have h1: v - 1 <= v := by simp
-  exact lt_of_le_of_lt h1 lt
-
-lemma f_inv_h_l1 {i: Fin (k+1)}: k - ↑i < k+1 := by
-  cases' i with v lt
-  simp
-  have h1: k-v ≤ k := by simp;
-  have h2: k < (k+1) := by simp;
-  apply lt_of_le_of_lt h1 h2
-
-lemma f_inv_h_l2 {i: Fin (k+1)} (h : ¬(↑i == (0: Nat)) = true) : ↑i - 1 < k + 1 := by
-  apply base_l1
 
 -- Definitions
-def f : Mathlib.Vector Int k → Mathlib.Vector Int k → Int
+def f (b: Int) (as xs:  Vector Int k) : Int :=
+  b + ∑ i ∈ Fin.FinSet k, as.get i * xs.get i
+
+def base (off: Int) (as: Mathlib.Vector Int (k+1)) (x': Int) : (i: Fin (k+1)) → Int
+  | 0 => |x'-off|
+  | ⟨i+1, lt⟩ =>
+    let i' : Fin (k+1) := ⟨i, Nat.lt_trans (Nat.lt_add_one i) lt⟩
+    base off as x' i' % as.get i'
+
+def f_inv (off: Int) (as ls: Mathlib.Vector Int (k+1)) (x': Int): Vector Int (k+1) :=
+  (Vector.fin_range (k+1)).map fun i => base off as x' i / |as.get i| + ls.get i
+
+def prodSum: Mathlib.Vector Int k → Mathlib.Vector Int k → Int
   | ⟨[], _⟩, ⟨[], _⟩ => 0
-  | ⟨a :: as, ha⟩, ⟨x :: xs, hx⟩ => a*x + f ⟨as, congrArg Nat.pred ha⟩ ⟨xs, congrArg Nat.pred hx⟩
+  | ⟨a :: as, ha⟩, ⟨x :: xs, hx⟩ => a*x + prodSum ⟨as, congrArg Nat.pred ha⟩ ⟨xs, congrArg Nat.pred hx⟩
 
-def base (as: Mathlib.Vector Int k) (x': Int) : (i: Fin k) → Int :=
-  λ i ↦
-  if h: ↑i == (0: Nat) then
-    |x'|
-  else
-    let ipred : Fin k := Fin.mk (↑i - 1) (base_l1)
-    base as x' ipred % as.get ipred
-termination_by i => i.val
-decreasing_by
-  all_goals simp_wf
-  cases' i with v lt
-  simp_all
-  contrapose h
-  simp_all
+def upToProd {k: Nat} (as ls xs : Vector Int k) (i: Fin k) : Int :=
+  prodSum (as.drop i) (Vector.zipWith (λ x l ↦ x-l) (xs.drop i) (ls.drop i))
 
-def f_inv_el (as: Mathlib.Vector Int k) (x': Int) (i: Fin k): Int :=
-  let aᵢ := as.get i
-  let baseᵢ := base as x' i
-  baseᵢ / |aᵢ|
+def offset (b: Int) (as ls: Mathlib.Vector Int k): Int := b + prodSum as ls
 
-def f_inv_h (as: Mathlib.Vector Int (k+1)) (x': Int): (i: Fin (k+1)) → List Int :=
-  λ i ↦
-    let idx: Fin (k+1) := ⟨k-↑i, f_inv_h_l1⟩
-    f_inv_el as x' idx ::
-    if h: ↑i == (0: Nat) then
-      []
-    else
-      f_inv_h as x' ⟨i.val-1, f_inv_h_l2 h⟩
-  termination_by i => i.val
-  decreasing_by
-    all_goals simp_wf
-    cases' i with v lt
-    simp_all
-    cases v
-    repeat simp_all
-
-theorem f_inv_length  {as: Mathlib.Vector Int (k+1)} {x': Int} {i: Fin (k+1)} :
-    (f_inv_h as x' i).length = i+1 := by
-    rw [f_inv_h]
-    cases' i with i isLt
-    simp
-    induction i
-    case zero =>
-      simp
-    case succ i ih =>
-      simp_all
-      have isLt2: (i <k+1) := by
-        simp_all;
-        have kk1: (k < k+1) := by simp;
-        exact Nat.lt_trans isLt kk1
-      rw [f_inv_h]
-      simp
-      rw [ih isLt2]
-
-def f_inv (as: Mathlib.Vector Int (k+1)) (x': Int): Mathlib.Vector Int (k+1) :=
-  ⟨(f_inv_h as x' ⟨k, by simp⟩),
-   by
-   rw [f_inv_length]⟩
-
-
-def X (nₖ : Vector Int (k+1)): Set (Vector Int (k+1)) :=
+def X (as ls : Vector Int (k+1)) (n : Int)
+(C: Vector Int (k+1) → Prop)
+: Set (Vector Int (k+1)) :=
   {xs : Vector Int (k+1) |
-    (∀ i, 0 < nₖ.get i) ∧
-    (∀ i: Fin (k+1), 0 ≤ xs.get i ∧ xs.get i < nₖ.get i)
+    xs.head < ls.head + n ∧
+    (∀ i: Fin (k+1), ls.get i ≤ xs.get i) ∧
+    (∀ i: Fin (k+1), ↑i<k →
+      (0 < as.last → upToProd as ls xs (i+1)  < as.get i) ∧
+      (as.last < 0 → as.get i < upToProd as ls xs (i+1)) )
+    ∧ C xs
   }
 
-def Y (nₖ aₖ : Vector Int (k+1)): Set Int := f aₖ '' X nₖ
-
-def Y' (nₖ aₖ : Vector Int (k+1)): Set Int :=
-  {x' : Int |
-    aₖ.last ≠ 0 ∧
-    x' % aₖ.last = 0 ∧
-    (∀ i, 0 < nₖ.get i) ∧
-    (∀ i, i<k → aₖ.get i = aₖ.get (i+1) * nₖ.get (i+1)) ∧
-    (0<aₖ.last → 0 ≤ x' ∧ x' < aₖ.head*nₖ.head) ∧
-    (aₖ.last<0 → aₖ.head*nₖ.head < x' ∧ x' ≤ 0 )
+def Y (as ls: Vector Int (k+1)) (off n: Int)
+(C: Vector Int (k+1) → Prop)
+: Set Int :=
+  {x : Int |
+    base off as x k % as.last = 0 ∧
+    (0<as.last → 0 ≤ x-off ∧ x-off < as.head*n) ∧
+    (as.last<0 → as.head*n < x-off ∧ x-off ≤ 0)
+    ∧ C (f_inv off as ls x)
   }
 
-def Props (nₖ aₖ : Vector Int (k+1)): Prop :=
-  aₖ.last ≠ 0 ∧
-  (∀ i, i<k → aₖ.get i = aₖ.get (i+1) * nₖ.get (i+1))
+def Props (as : Vector Int (k+1)) (n : Int)
+: Prop :=
+  0 < n ∧
+  (∀ i, as.get i ≠ 0) ∧
+  (∀ i, i<k → Int.sign (as.get i) = Int.sign (as.get (i+1)))
+
+
+-- Helper definitions, on which most of the actual proves take place.
+def f' (b: Int) (as ls xs:  Mathlib.Vector Int k) : Int := b + prodSum as (Vector.zipWith (λ x l ↦ x-l) xs ls)
+
+def f_inv_el (off: Int) (as ls: Mathlib.Vector Int (k+1)) (x': Int) (i: Fin (k+1)): Int :=
+  base off as x' i / |as.get i| + ls.get i
+
+def f_inv'' (off: Int) (as ls: Mathlib.Vector Int (k+1)) (x': Int): (i: Fin (k+1)) → Vector Int (i+1)
+  | 0 => f_inv_el off as ls x' ⟨k, Nat.lt_add_one k⟩ ::ᵥ Vector.nil
+  | ⟨i+1, lt⟩ => f_inv_el off as ls x' ⟨k-(i+1), by omega⟩ ::ᵥ f_inv'' off as ls x' ⟨i, by omega⟩
+
+def f_inv' (off: Int) (as ls: Mathlib.Vector Int (k+1)) (x': Int): Vector Int (k+1) :=
+  f_inv'' off as ls x' ⟨k, by simp⟩
+
+def ls_zero: Mathlib.Vector Int k := ⟨List.replicate k 0, by simp⟩
+
+def implies {a: Prop} {b: Prop} (h2: a → b):  (a ∧ b) = a := by
+  have right: a ∧ b → a := by
+    intro ab
+    exact ab.left
+  have left: a → a ∧ b := by
+    intro ha
+    constructor
+    · exact ha
+    · exact h2 ha
+  exact propext ⟨right, left⟩
+
+def X2 (as ls : Vector Int (k+1)) (n : Int)
+: Set (Vector Int (k+1)) :=
+  {xs : Vector Int (k+1) |
+    xs.head < ls.head + n ∧
+    (∀ i: Fin (k+1), ls.get i ≤ xs.get i) ∧
+    (∀ i: Fin (k+1), ↑i<k →
+      (0 < as.last → upToProd as ls xs (i+1)  < as.get i) ∧
+      (as.last < 0 → as.get i < upToProd as ls xs (i+1))
+    )
+  }
+
+def Y2 (as: Vector Int (k+1)) (off n: Int)
+: Set Int :=
+  {x : Int |
+    base off as x k % as.last = 0 ∧
+    (0<as.last → 0 ≤ x-off ∧ x-off < as.head*n) ∧
+    (as.last<0 → as.head*n < x-off ∧ x-off ≤ 0)
+  }
